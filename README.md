@@ -1,5 +1,7 @@
 # DeepSeek-OCR WebUI
 
+**语言:** [English](README.md) | [中文](README_zh.md)
+
 A web-based interface for DeepSeek-OCR model with multi-language support (English/Chinese).
 
 ## Quick Start

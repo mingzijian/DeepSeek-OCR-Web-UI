@@ -1,5 +1,8 @@
 # DeepSeek-OCR WebUI
 
+
+**Language:** [English](README.md) | [中文](README_zh.md)
+
 基于 DeepSeek-OCR 模型的网页界面，支持中英文双语。
 
 ## 快速开始
