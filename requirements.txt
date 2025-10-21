@@ -1,0 +1,24 @@
+# DeepSeek-OCR Official Dependencies (Required by the model)
+transformers==4.46.3
+tokenizers==0.20.3
+PyMuPDF
+img2pdf
+einops
+easydict
+addict
+Pillow
+numpy
+
+# Additional dependencies for the Gradio interface
+gradio>=4.0.0
+
+# PyTorch with CUDA support
+torch==2.6.0
+torchvision>=0.15.0
+
+# Model optimization (optional but recommended)
+# flash-attn==2.7.3
+
+# Utilities for better functionality
+requests>=2.28.0
+tqdm>=4.64.0
