@@ -24,7 +24,7 @@ class OCRApp:
         # Download from: https://www.modelscope.cn/models/deepseek-ai/DeepSeek-OCR
         # or: https://huggingface.co/deepseek-ai/DeepSeek-OCR
         #self.model_path = '/you_path/deepseek-ai/DeepSeek-OCR'
-        self.model_path = '/mydisk/zklz/deepseek-ocr/deepseek-ai/DeepSeek-OCR'
+        self.model_path = 'deepseek-ai/DeepSeek-OCR'
         
     def set_model_path(self, path):
         """Set custom model path"""
