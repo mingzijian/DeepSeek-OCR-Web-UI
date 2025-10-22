@@ -70,9 +70,9 @@ Download the DeepSeek-OCR model from one of these sources:
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.12+
 - CUDA-compatible GPU (recommended)
-- 8GB+ GPU memory
+- 16GB+ GPU memory 4080+
 - PyTorch with CUDA support
 
 ## Features
