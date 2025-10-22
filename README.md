@@ -2,7 +2,7 @@
 
 **语言:** [English](README.md) | [中文](README_zh.md)
 
-A web-based interface for DeepSeek-OCR model with multi-language support (English/Chinese).
+A web-based interface for DeepSeek-OCR model.
 
 ## Quick Start
 ![images.png](images.png)
