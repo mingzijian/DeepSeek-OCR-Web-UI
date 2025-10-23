@@ -23,6 +23,7 @@ Download the DeepSeek-OCR model from one of these sources:
    conda create -n deepseek-ocr python=3.12.9 -y
    conda activate deepseek-ocr
    pip install -r requirements.txt
+   
    pip install flash-attn==2.7.3 --no-build-isolation
    
    ```
