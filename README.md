@@ -4,6 +4,16 @@
 
 A web-based interface for DeepSeek-OCR model.
 
+## 📋 Release Notes
+
+### [2025-01-24] - Enhanced Table Recognition & Visual Annotation
+- ✨ **Table Recognition Display**: Added enhanced table structure visualization with markdown formatting
+- 🎯 **Image Position Annotation**: Implemented interactive HTML-based coordinate annotation system
+  - Color-coded bounding boxes for detected text regions
+  - Real-time coordinate legend with precise positioning
+  - Multi-format output support (Markdown, HTML, Annotated Image)
+  - Responsive design that scales perfectly across all devices
+
 ## Quick Start
 ![images.png](images.png)
 
