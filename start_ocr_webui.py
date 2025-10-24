@@ -5,12 +5,14 @@ import os
 import tempfile
 from typing import List, Tuple
 import base64
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import traceback
 from i18n import i18n
 import sys
 from io import StringIO
 import re
+import random
+import json
 
 class OCRApp:
     """OCR Application with DeepSeek-OCR model"""
@@ -112,7 +114,108 @@ class OCRApp:
         
         return '\n'.join(cleaned_lines).strip()
     
-    def process_images(self, images: List, prompt: str, output_format: str = "markdown", progress=gr.Progress()) -> Tuple[str, str]:
+    def extract_coordinates_from_text(self, text: str) -> List[Tuple[List[int], str]]:
+        """Extract bounding box coordinates and associated text from OCR result"""
+        coordinates_with_text = []
+        
+        # Pattern to match coordinates like [[609, 17, 656, 35]]
+        coord_pattern = r'\[\[(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\]\]'
+        
+        lines = text.split('\n')
+        for line in lines:
+            matches = re.finditer(coord_pattern, line)
+            for match in matches:
+                x1, y1, x2, y2 = map(int, match.groups())
+                # Extract text associated with these coordinates (text after the coordinates on the same line)
+                text_after_coords = line[match.end():].strip()
+                if not text_after_coords:
+                    # If no text after coordinates, try to get text before coordinates
+                    text_before_coords = line[:match.start()].strip()
+                    associated_text = text_before_coords if text_before_coords else f"Region {len(coordinates_with_text)+1}"
+                else:
+                    associated_text = text_after_coords
+                
+                coordinates_with_text.append(([x1, y1, x2, y2], associated_text))
+        
+        return coordinates_with_text
+    
+    def generate_color_palette(self, num_colors: int) -> List[str]:
+        """Generate a palette of distinct colors for bounding boxes"""
+        colors = [
+            '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+            '#FFA500', '#800080', '#008000', '#FFC0CB', '#A52A2A', '#808080',
+            '#000080', '#008080', '#800000', '#808000', '#C0C0C0', '#FF69B4',
+            '#32CD32', '#FF4500', '#DA70D6', '#40E0D0', '#EE82EE', '#90EE90'
+        ]
+        
+        # If we need more colors than predefined, generate random ones
+        while len(colors) < num_colors:
+            color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+            if color not in colors:
+                colors.append(color)
+        
+        return colors[:num_colors]
+    
+    def draw_bounding_boxes(self, image_path: str, coordinates_with_text: List[Tuple[List[int], str]]) -> str:
+        """Draw colored bounding boxes on image and return path to annotated image"""
+        if not coordinates_with_text:
+            return image_path
+        
+        try:
+            # Open the image
+            image = Image.open(image_path)
+            draw = ImageDraw.Draw(image)
+            
+            # Generate colors for each bounding box
+            colors = self.generate_color_palette(len(coordinates_with_text))
+            
+            # Try to load a font, fallback to default if not available
+            try:
+                font = ImageFont.truetype("arial.ttf", 12)
+            except:
+                try:
+                    font = ImageFont.load_default()
+                except:
+                    font = None
+            
+            # Draw each bounding box
+            for i, (coords, text) in enumerate(coordinates_with_text):
+                x1, y1, x2, y2 = coords
+                color = colors[i]
+                
+                # Draw bounding box rectangle
+                draw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+                
+                # Draw text label with background
+                if font:
+                    bbox = draw.textbbox((0, 0), f"{i+1}", font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                else:
+                    text_width, text_height = 10, 10
+                
+                # Draw background rectangle for text
+                label_bg = [x1, y1-text_height-4, x1+text_width+8, y1]
+                draw.rectangle(label_bg, fill=color)
+                
+                # Draw text
+                if font:
+                    draw.text((x1+4, y1-text_height-2), f"{i+1}", fill='white', font=font)
+                else:
+                    draw.text((x1+4, y1-text_height-2), f"{i+1}", fill='white')
+            
+            # Save annotated image
+            base_name = os.path.splitext(os.path.basename(image_path))[0]
+            annotated_path = f"tmp_rovodev_annotated_{base_name}_{random.randint(1000,9999)}.png"
+            image.save(annotated_path)
+            
+            return annotated_path
+            
+        except Exception as e:
+            print(f"Error drawing bounding boxes: {e}")
+            return image_path
+    
+    def process_images(self, images: List, prompt: str, output_format: List[str], progress=gr.Progress()) -> Tuple[str, str]:
         """Process multiple images for OCR recognition"""
         print(f"=== Starting image processing ===")
         print(f"Number of images: {len(images) if images else 0}")
@@ -225,15 +328,29 @@ class OCRApp:
                     else:
                         cleaned_result = i18n.get('empty_result')
                 
+                # Extract coordinates from raw result for annotation
+                coordinates_with_text = self.extract_coordinates_from_text(raw_result)
+                
+                # Generate annotated image if coordinates found and image format is requested
+                annotated_image_path = None
+                if coordinates_with_text and isinstance(output_format, list) and 'image' in output_format:
+                    annotated_image_path = self.draw_bounding_boxes(temp_image_path, coordinates_with_text)
+                    print(f"Generated annotated image: {annotated_image_path}")
+                
                 # Print debug information
                 print(i18n.get('raw_result_length', length=len(raw_result)))
                 print(i18n.get('cleaned_result', 
                               result=cleaned_result[:200] + "..." if len(cleaned_result) > 200 else cleaned_result))
+                if coordinates_with_text:
+                    print(f"Found {len(coordinates_with_text)} coordinate regions")
                 
                 results.append({
                     'image_index': idx + 1,
                     'result': str(cleaned_result),
-                    'status': 'success'
+                    'status': 'success',
+                    'coordinates': coordinates_with_text,
+                    'original_image_path': temp_image_path,
+                    'annotated_image_path': annotated_image_path
                 })
                 
                 # Clean up temporary files (only if we created them)
@@ -252,7 +369,10 @@ class OCRApp:
                 results.append({
                     'image_index': idx + 1,
                     'result': error_msg,
-                    'status': 'error'
+                    'status': 'error',
+                    'coordinates': [],
+                    'original_image_path': None,
+                    'annotated_image_path': None
                 })
         
         print(f"\n=== Processing complete, total results: {len(results)} ===")
@@ -266,36 +386,67 @@ class OCRApp:
         
         return formatted_results, summary
     
-    def format_results(self, results: List[dict], output_format: str = "markdown") -> str:
+    def format_results(self, results: List[dict], output_format: List[str]) -> str:
         """Format recognition results for display"""
         formatted = i18n.get('results_title')
+        
+        # Handle case where output_format is still a string (backward compatibility)
+        if isinstance(output_format, str):
+            output_format = [output_format]
         
         for result in results:
             status_icon = "✅" if result['status'] == 'success' else "❌"
             formatted += f"## {i18n.get('results_tab')} {result['image_index']} {status_icon}\n\n"
+            
+            # Display annotated image if available and image format is selected
+            if 'image' in output_format and result.get('annotated_image_path'):
+                try:
+                    # Convert image to base64 for display
+                    with open(result['annotated_image_path'], 'rb') as img_file:
+                        img_data = base64.b64encode(img_file.read()).decode()
+                    formatted += f"### Annotated Image with Bounding Boxes\n"
+                    formatted += f'<img src="data:image/png;base64,{img_data}" style="max-width: 100%; height: auto;" />\n\n'
+                    
+                    # Display coordinate legend if coordinates exist
+                    if result.get('coordinates'):
+                        formatted += "### Coordinate Legend\n"
+                        colors = self.generate_color_palette(len(result['coordinates']))
+                        for i, (coords, text) in enumerate(result['coordinates']):
+                            color = colors[i]
+                            formatted += f"<span style='color: {color}; font-weight: bold;'>{i+1}.</span> "
+                            formatted += f"**[{coords[0]}, {coords[1]}, {coords[2]}, {coords[3]}]** - {text}\n\n"
+                        formatted += "\n"
+                except Exception as e:
+                    print(f"Error displaying annotated image: {e}")
             
             # Handle result content
             result_content = result['result']
             if not result_content or str(result_content).strip() == "":
                 result_content = i18n.get('no_result')
             
-            # Format content based on output format
-            if output_format.lower() == "html":
-                # HTML format - display content as HTML
-                if len(str(result_content)) > 1000:
-                    formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
-                    formatted += f"<div style='border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;'>\n{result_content}\n</div>\n\n"
-                    formatted += "</details>\n\n"
+            # Display content in requested formats
+            for fmt in output_format:
+                if fmt == 'image':
+                    continue  # Already handled above
+                
+                formatted += f"### {fmt.upper()} Format\n"
+                
+                if fmt.lower() == "html":
+                    # HTML format - display content as HTML
+                    if len(str(result_content)) > 1000:
+                        formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
+                        formatted += f"<div style='border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;'>\n{result_content}\n</div>\n\n"
+                        formatted += "</details>\n\n"
+                    else:
+                        formatted += f"<div style='border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;'>\n{result_content}\n</div>\n\n"
                 else:
-                    formatted += f"<div style='border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;'>\n{result_content}\n</div>\n\n"
-            else:
-                # Markdown format - display content in code blocks
-                if len(str(result_content)) > 1000:
-                    formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
-                    formatted += f"```\n{result_content}\n```\n\n"
-                    formatted += "</details>\n\n"
-                else:
-                    formatted += f"```\n{result_content}\n```\n\n"
+                    # Markdown format - display content in code blocks
+                    if len(str(result_content)) > 1000:
+                        formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
+                        formatted += f"```\n{result_content}\n```\n\n"
+                        formatted += "</details>\n\n"
+                    else:
+                        formatted += f"```\n{result_content}\n```\n\n"
             
             formatted += "---\n\n"
         
@@ -314,9 +465,47 @@ class OCRApp:
         summary += f"- {i18n.get('success_rate')}: {(success/total*100):.1f}%\n\n"
         
         return summary
+    
+    def cleanup_temp_files(self, results: List[dict]):
+        """Clean up temporary annotated image files"""
+        for result in results:
+            if result.get('annotated_image_path') and os.path.exists(result['annotated_image_path']):
+                try:
+                    os.unlink(result['annotated_image_path'])
+                    print(f"Cleaned up temporary file: {result['annotated_image_path']}")
+                except Exception as e:
+                    print(f"Error cleaning up {result['annotated_image_path']}: {e}")
 
 # Create OCR application instance
 ocr_app = OCRApp()
+
+# Wrapper function for processing with cleanup
+def process_images_with_cleanup(images, prompt, output_format):
+    """Process images and schedule cleanup of temporary files"""
+    results_text, summary = ocr_app.process_images(images, prompt, output_format)
+    
+    # Schedule cleanup of temporary files after a delay
+    import threading
+    import time
+    
+    def delayed_cleanup():
+        time.sleep(30)  # Wait 30 seconds to allow UI to load images
+        # Find all temp files created by this session
+        import glob
+        temp_files = glob.glob("tmp_rovodev_annotated_*.png")
+        for temp_file in temp_files:
+            try:
+                os.unlink(temp_file)
+                print(f"Cleaned up temporary file: {temp_file}")
+            except Exception as e:
+                print(f"Error cleaning up {temp_file}: {e}")
+    
+    # Start cleanup thread
+    cleanup_thread = threading.Thread(target=delayed_cleanup)
+    cleanup_thread.daemon = True
+    cleanup_thread.start()
+    
+    return results_text, summary
 
 # Language change handler
 def change_language(language):
@@ -414,12 +603,12 @@ def create_interface():
                     lines=3
                 )
                 
-                # Output format selector
-                output_format = gr.Dropdown(
-                    choices=[("HTML", "html"),("Markdown", "markdown") ],
-                    value="html",
+                # Output format selector (multi-select)
+                output_format = gr.CheckboxGroup(
+                    choices=[("Markdown", "markdown"), ("HTML", "html"), ("Annotated Image", "image")],
+                    value=["markdown"],
                     label="Output Format / 输出格式",
-                    info="Choose how to display the OCR results / 选择OCR结果的显示方式"
+                    info="Choose how to display the OCR results (multiple selections allowed) / 选择OCR结果的显示方式（可多选）"
                 )
                 
                 # Preset prompt buttons
@@ -472,7 +661,7 @@ def create_interface():
         
         # Recognition button click event
         recognize_btn.click(
-            fn=ocr_app.process_images,
+            fn=process_images_with_cleanup,
             inputs=[images_input, prompt_input, output_format],
             outputs=[results_output, summary_output],
             show_progress=True
