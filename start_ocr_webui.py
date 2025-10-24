@@ -20,11 +20,19 @@ class OCRApp:
         self.tokenizer = None
         self.model_loaded = False
         
-        # Model path - Users need to modify this path according to their setup
+        # Model path - Can be configured via environment variable DEEPSEEK_OCR_MODEL_PATH
         # Download from: https://www.modelscope.cn/models/deepseek-ai/DeepSeek-OCR
         # or: https://huggingface.co/deepseek-ai/DeepSeek-OCR
-        #self.model_path = '/you_path/deepseek-ai/DeepSeek-OCR'
-        self.model_path = 'deepseek-ai/DeepSeek-OCR'
+        # Priority: Environment variable > Default value
+        default_model_path = 'deepseek-ai/DeepSeek-OCR'
+        self.model_path = os.environ.get('DEEPSEEK_OCR_MODEL_PATH', default_model_path)
+        
+        # Print model path info for debugging
+        if os.environ.get('DEEPSEEK_OCR_MODEL_PATH'):
+            print(f"Using model path from environment variable: {self.model_path}")
+        else:
+            print(f"Using default model path: {self.model_path}")
+            print("To use a custom model path, set the environment variable: DEEPSEEK_OCR_MODEL_PATH")
         
     def set_model_path(self, path):
         """Set custom model path"""
