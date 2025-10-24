@@ -104,7 +104,7 @@ class OCRApp:
         
         return '\n'.join(cleaned_lines).strip()
     
-    def process_images(self, images: List, prompt: str, progress=gr.Progress()) -> Tuple[str, str]:
+    def process_images(self, images: List, prompt: str, output_format: str = "markdown", progress=gr.Progress()) -> Tuple[str, str]:
         """Process multiple images for OCR recognition"""
         print(f"=== Starting image processing ===")
         print(f"Number of images: {len(images) if images else 0}")
@@ -250,7 +250,7 @@ class OCRApp:
         print(f"\n=== Processing complete, total results: {len(results)} ===")
         
         # Format results for display
-        formatted_results = self.format_results(results)
+        formatted_results = self.format_results(results, output_format)
         summary = self.generate_summary(results)
         
         print(f"Formatted results length: {len(formatted_results)}")
@@ -258,7 +258,7 @@ class OCRApp:
         
         return formatted_results, summary
     
-    def format_results(self, results: List[dict]) -> str:
+    def format_results(self, results: List[dict], output_format: str = "markdown") -> str:
         """Format recognition results for display"""
         formatted = i18n.get('results_title')
         
@@ -271,13 +271,23 @@ class OCRApp:
             if not result_content or str(result_content).strip() == "":
                 result_content = i18n.get('no_result')
             
-            # Add collapsible display for long results
-            if len(str(result_content)) > 1000:
-                formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
-                formatted += f"```\n{result_content}\n```\n\n"
-                formatted += "</details>\n\n"
+            # Format content based on output format
+            if output_format.lower() == "html":
+                # HTML format - display content as HTML
+                if len(str(result_content)) > 1000:
+                    formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
+                    formatted += f"<div style='border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;'>\n{result_content}\n</div>\n\n"
+                    formatted += "</details>\n\n"
+                else:
+                    formatted += f"<div style='border: 1px solid #ccc; padding: 10px; background-color: #f9f9f9;'>\n{result_content}\n</div>\n\n"
             else:
-                formatted += f"```\n{result_content}\n```\n\n"
+                # Markdown format - display content in code blocks
+                if len(str(result_content)) > 1000:
+                    formatted += f"<details>\n<summary>View full result (Length: {len(str(result_content))} characters)</summary>\n\n"
+                    formatted += f"```\n{result_content}\n```\n\n"
+                    formatted += "</details>\n\n"
+                else:
+                    formatted += f"```\n{result_content}\n```\n\n"
             
             formatted += "---\n\n"
         
@@ -324,6 +334,8 @@ def create_interface_components():
         gr.update(label=i18n.get('upload_label')),
         gr.update(label=i18n.get('prompt_label'), 
                  placeholder=i18n.get('prompt_placeholder')),
+        gr.update(label="Output Format / 输出格式", 
+                 info="Choose how to display the OCR results / 选择OCR结果的显示方式"),
         gr.update(value=i18n.get('preset_general')),
         gr.update(value=i18n.get('preset_markdown')),
         gr.update(value=i18n.get('preset_table')),
@@ -339,9 +351,33 @@ def create_interface_components():
 def create_interface():
     """Create the main Gradio interface"""
     with gr.Blocks(title=i18n.get('app_title'), theme=gr.themes.Soft()) as demo:
-        # Language switcher at the top
+        # Header with title, GitHub link and language switcher
         with gr.Row():
-            gr.Markdown(f"# {i18n.get('app_title')}")
+            with gr.Column(scale=3):
+                gr.Markdown(f"# {i18n.get('app_title')}")
+            with gr.Column(scale=1, min_width=120):
+                github_btn = gr.HTML("""
+                    <div style="text-align: center; margin-top: 10px;">
+                        <a href="https://github.com/newlxj/DeepSeek-OCR-Web-UI" target="_blank" style="
+                            display: inline-flex;
+                            align-items: center;
+                            padding: 8px 16px;
+                            background-color: #f6f8fa;
+                            color: #24292e;
+                            text-decoration: none;
+                            border: 1px solid #d1d9e0;
+                            border-radius: 6px;
+                            font-size: 14px;
+                            font-weight: 500;
+                            transition: all 0.2s;
+                        " onmouseover="this.style.backgroundColor='#f3f4f6'; this.style.borderColor='#c9d1d9';" onmouseout="this.style.backgroundColor='#f6f8fa'; this.style.borderColor='#d1d9e0';">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 6px;">
+                                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                            </svg>
+                            GitHub
+                        </a>
+                    </div>
+                """)
             with gr.Column(scale=1, min_width=150):
                 language_selector = gr.Dropdown(
                     choices=[('English', 'en'), ('中文', 'zh')],
@@ -368,6 +404,14 @@ def create_interface():
                     value="<|grounding|>Convert the document to markdown.",
                     placeholder=i18n.get('prompt_placeholder'),
                     lines=3
+                )
+                
+                # Output format selector
+                output_format = gr.Dropdown(
+                    choices=[("HTML", "html"),("Markdown", "markdown") ],
+                    value="html",
+                    label="Output Format / 输出格式",
+                    info="Choose how to display the OCR results / 选择OCR结果的显示方式"
                 )
                 
                 # Preset prompt buttons
@@ -407,7 +451,7 @@ def create_interface():
             fn=lambda lang: change_language(lang),
             inputs=[language_selector],
             outputs=[
-                images_input, prompt_input, preset_ocr, preset_markdown, 
+                images_input, prompt_input, output_format, preset_ocr, preset_markdown, 
                 preset_table, recognize_btn, results_output, summary_output,
                 results_output, summary_output, instructions_md
             ]
@@ -421,7 +465,7 @@ def create_interface():
         # Recognition button click event
         recognize_btn.click(
             fn=ocr_app.process_images,
-            inputs=[images_input, prompt_input],
+            inputs=[images_input, prompt_input, output_format],
             outputs=[results_output, summary_output],
             show_progress=True
         )
