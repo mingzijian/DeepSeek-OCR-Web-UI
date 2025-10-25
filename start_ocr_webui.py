@@ -26,7 +26,7 @@ class OCRApp:
         # Download from: https://www.modelscope.cn/models/deepseek-ai/DeepSeek-OCR
         # or: https://huggingface.co/deepseek-ai/DeepSeek-OCR
         # Priority: Environment variable > Default value
-        default_model_path = 'deepseek-ai/DeepSeek-OCR'
+        default_model_path = '/Users/mingzijian/.cache/modelscope/hub/models/deepseek-ai/DeepSeek-OCR'
         self.model_path = os.environ.get('DEEPSEEK_OCR_MODEL_PATH', default_model_path)
         
         # Print model path info for debugging
